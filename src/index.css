@@ -1,0 +1,143 @@
+@import url('https://fonts.googleapis.com/css2?family=Noto+Nastaliq+Urdu:wght@400;500;600;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --color-primary: var(--primary);
+  --color-secondary: var(--secondary);
+  --color-accent: var(--accent);
+  --color-background: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-soft: var(--surface-soft);
+  --color-success: var(--success);
+  --color-danger: var(--danger);
+  --color-text: var(--text);
+  --color-muted: var(--muted-text);
+  --color-border: var(--border);
+
+  --font-sans: var(--font-primary);
+}
+
+@layer base {
+  :root {
+    /* Light Earth Theme */
+    --primary: #6B4F3A;
+    --secondary: #8B6B4A;
+    --accent: #A68A64;
+    --bg: #F5F1EA;
+    --surface: #FFFFFF;
+    --surface-soft: #F9F8F6;
+    --success: #4D7C4D;
+    --danger: #DC2626;
+    --text: #1C1917; /* Darker primary text for readability */
+    --muted-text: #57534E; /* Darker secondary text */
+    --border: #D6D3D1;
+    --shadow-panel: 0 24px 48px -12px rgba(107, 79, 58, 0.15);
+    
+    --font-primary: "Inter", system-ui, sans-serif;
+  }
+
+  html.dark {
+    /* Dark Professional Earth Theme */
+    --primary: #C4A484;
+    --secondary: #A68A64;
+    --accent: #D2B48C;
+    --bg: #1C1917;
+    --surface: #292524;
+    --surface-soft: #3A332E;
+    --success: #86A873;
+    --danger: #F87171;
+    --text: #F5F1EA;
+    --muted-text: #D6D3D1;
+    --border: #57534E;
+    --shadow-panel: 0 24px 48px -12px rgba(0, 0, 0, 0.5);
+  }
+
+  html[dir="rtl"] {
+    --font-primary: "Noto Nastaliq Urdu", "Noto Naskh Arabic", serif;
+  }
+}
+
+@layer utilities {
+  .leaflet-container {
+    width: 100%;
+    height: 100%;
+    z-index: 10;
+  }
+  
+  .custom-scrollbar::-webkit-scrollbar { 
+    width: 6px; 
+  }
+  .custom-scrollbar::-webkit-scrollbar-track { 
+    background: transparent; 
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb { 
+    background: var(--border); 
+    border-radius: 10px; 
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover { 
+    background: var(--muted-text); 
+  }
+}
+
+body, html, #root {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background-color: var(--bg);
+  color: var(--text);
+  font-family: var(--font-primary);
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Leaflet Overrides */
+.leaflet-bar {
+  border: none !important;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06) !important;
+  border-radius: 0.5rem !important;
+  overflow: hidden;
+  background-color: var(--surface) !important;
+}
+.leaflet-bar a {
+  background-color: var(--surface) !important;
+  color: var(--primary) !important;
+  border-bottom: 1px solid var(--border) !important;
+}
+.leaflet-bar a:hover {
+  background-color: var(--bg) !important;
+}
+.leaflet-bar a:last-child {
+  border-bottom: none !important;
+}
+.leaflet-popup-content-wrapper {
+  background-color: var(--surface) !important;
+  color: var(--text) !important;
+  border: 1px solid var(--border) !important;
+}
+.leaflet-popup-tip {
+  background-color: var(--surface) !important;
+  border: 1px solid var(--border) !important;
+}
+
+/* Hide native Leaflet Draw toolbar to use custom sidebar buttons */
+.leaflet-draw-toolbar {
+  display: none !important;
+}
+
+/* Make Leaflet Edit Handles Circular */
+.leaflet-editing-icon {
+  border-radius: 50% !important;
+  width: 12px !important;
+  height: 12px !important;
+  margin-left: -6px !important;
+  margin-top: -6px !important;
+  background-color: #2563EB !important;
+  border: 2px solid #FFFFFF !important;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.4) !important;
+}
+
+/* Hide native Leaflet Attribution as requested */
+.leaflet-control-attribution {
+  display: none !important;
+}
