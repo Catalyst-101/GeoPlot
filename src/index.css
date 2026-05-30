@@ -1,6 +1,4 @@
 @import url('https://fonts.googleapis.com/css2?family=Noto+Nastaliq+Urdu:wght@400;500;600;700&display=swap');
-@import 'maplibre-gl/dist/maplibre-gl.css';
-@import '@mapbox/mapbox-gl-draw/dist/mapbox-gl-draw.css';
 @import "tailwindcss";
 
 @theme {
@@ -87,31 +85,43 @@ body, html, #root {
   transition: background-color 0.3s ease, color 0.3s ease;
 }
 
-/* MapLibre specific overrides */
-.maplibregl-popup-content {
+/* Leaflet Dark Mode Fixes */
+.leaflet-container {
+  background-color: var(--bg) !important;
+  font-family: inherit !important;
+}
+
+.leaflet-popup-content-wrapper {
   background-color: var(--surface) !important;
-  border: 1px solid var(--border) !important;
   color: var(--text) !important;
   box-shadow: 0 4px 12px rgba(0,0,0,0.1) !important;
   border-radius: 12px !important;
-  padding: 8px !important;
+  border: 1px solid var(--border) !important;
 }
 
-.maplibregl-popup-tip {
-  border-top-color: var(--border) !important;
-  border-bottom-color: var(--border) !important;
+.leaflet-popup-tip {
+  background-color: var(--surface) !important;
+  border: 1px solid var(--border) !important;
 }
 
-html.dark .maplibregl-popup-tip {
-  border-top-color: var(--surface) !important;
-}
-
-/* Hide MapLibre Attribution */
-.maplibregl-ctrl-attrib {
+/* Hide native Leaflet Draw toolbar to use custom sidebar buttons */
+.leaflet-draw-toolbar {
   display: none !important;
 }
 
-/* Hide native Mapbox Draw control group (we use sidebar) */
-.mapboxgl-ctrl-group.mapboxgl-ctrl {
+/* Make Leaflet Edit Handles Circular */
+.leaflet-editing-icon {
+  border-radius: 50% !important;
+  width: 12px !important;
+  height: 12px !important;
+  margin-left: -6px !important;
+  margin-top: -6px !important;
+  background-color: #2563EB !important;
+  border: 2px solid #FFFFFF !important;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.4) !important;
+}
+
+/* Hide native Leaflet Attribution as requested */
+.leaflet-control-attribution {
   display: none !important;
 }
