@@ -126,9 +126,9 @@ body, html, #root {
   display: none !important;
 }
 
-/* Hide zoom controls on mobile as pinch-to-zoom is preferred */
+/* Push zoom controls up on mobile so they aren't blocked by screen/browser UI */
 @media (max-width: 768px) {
   .leaflet-control-zoom {
-    display: none !important;
+    margin-bottom: 50px !important;
   }
 }
