@@ -32,18 +32,15 @@ const ContextMenuMarkers = ({ pointers, setPointers }) => {
   const map = useMap();
   const pressTimer = useRef(null);
 
-  // Handle right click
+  // Handle long left click / touch
   useMapEvents({
-    contextmenu(e) {
-      setPointers(prev => [...prev, { id: Date.now(), latlng: e.latlng }]);
-    },
     mousedown(e) {
-      // Start long press timer on left click
-      if (e.originalEvent.button === 0) {
-        pressTimer.current = setTimeout(() => {
-          setPointers(prev => [...prev, { id: Date.now(), latlng: e.latlng }]);
-        }, 800); // 800ms for long press
-      }
+      // Only trigger on left click (button 0). Leaflet maps touch to button 0 as well.
+      if (e.originalEvent.button !== 0 && e.originalEvent.type !== 'touchstart') return;
+      
+      pressTimer.current = setTimeout(() => {
+        setPointers([{ id: Date.now(), latlng: e.latlng }]);
+      }, 700); // 700ms for long press
     },
     mouseup() {
       if (pressTimer.current) clearTimeout(pressTimer.current);
@@ -352,6 +349,19 @@ const MapEffect = ({ searchedLocation }) => {
   return null;
 };
 
+// Component to dynamically update Map Zoom Limits
+const ZoomUpdater = ({ currentLayer }) => {
+  const map = useMap();
+  useEffect(() => {
+    const newMaxZoom = currentLayer.maxZoom || 18;
+    map.setMaxZoom(newMaxZoom);
+    if (map.getZoom() > newMaxZoom) {
+      map.setZoom(newMaxZoom);
+    }
+  }, [currentLayer, map]);
+  return null;
+};
+
 // Main MapView Component
 const MapView = forwardRef(({ 
   onPolygonCalculated, 
@@ -424,6 +434,7 @@ const MapView = forwardRef(({
         />
         
         <MapEffect searchedLocation={searchedLocation} />
+        <ZoomUpdater currentLayer={currentLayer} />
 
         <ContextMenuMarkers pointers={pointers} setPointers={setPointers} />
 
@@ -433,6 +444,13 @@ const MapView = forwardRef(({
           </Marker>
         )}
       </MapContainer>
+
+      {/* Outdated Map Warning */}
+      <div className="absolute top-4 right-20 z-[1000] pointer-events-none">
+        <div className="bg-[#FEF3C7]/95 dark:bg-[#78350F]/95 backdrop-blur px-4 py-2 text-[11px] sm:text-xs text-[#92400E] dark:text-[#FEF3C7] rounded-lg shadow-md border border-[#FCD34D] dark:border-[#B45309] max-w-[280px] text-center font-medium">
+          {t('outdated_map_warning') || 'Map data may be outdated in some areas. Please verify important boundaries with local records or recent imagery.'}
+        </div>
+      </div>
 
       <LayerSwitcher 
         currentLayer={currentLayer} 

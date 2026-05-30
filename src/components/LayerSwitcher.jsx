@@ -8,22 +8,22 @@ export const LAYERS = {
     url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
     attribution: '&copy; OpenStreetMap contributors',
     maxNativeZoom: 19,
-    maxZoom: 22
+    maxZoom: 19
   },
   SATELLITE: {
     name: 'layer_satellite',
     url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
     attribution: 'Tiles &copy; Esri',
-    maxNativeZoom: 16, // Lowered to 16 because Esri returns "Data Not Available" image tiles at 17+ in rural areas
-    maxZoom: 22,
+    maxNativeZoom: 18,
+    maxZoom: 18,
     overlayUrl: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png' // Adds city/road labels over satellite
   },
   TERRAIN: {
     name: 'layer_terrain',
     url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
     attribution: '&copy; OpenTopoMap',
-    maxNativeZoom: 15, // Lowered to 15 to ensure reliable coverage
-    maxZoom: 22
+    maxNativeZoom: 17,
+    maxZoom: 17
   }
 };
 
