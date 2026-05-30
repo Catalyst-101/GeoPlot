@@ -125,3 +125,10 @@ body, html, #root {
 .leaflet-control-attribution {
   display: none !important;
 }
+
+/* Hide zoom controls on mobile as pinch-to-zoom is preferred */
+@media (max-width: 768px) {
+  .leaflet-control-zoom {
+    display: none !important;
+  }
+}

@@ -43,7 +43,7 @@ const LayerSwitcher = ({ currentLayer, onLayerChange }) => {
   }, []);
 
   return (
-    <div className="absolute top-6 right-6 z-[1000]" ref={dropdownRef}>
+    <div className="absolute top-[80px] md:top-6 right-4 md:right-6 z-[1000]" ref={dropdownRef}>
       <button
         onClick={() => setIsOpen(!isOpen)}
         className={`bg-surface w-10 h-10 rounded-lg shadow-md flex items-center justify-center text-primary hover:bg-surface-soft transition-colors border-2 ${isOpen ? 'border-primary' : 'border-transparent'}`}
