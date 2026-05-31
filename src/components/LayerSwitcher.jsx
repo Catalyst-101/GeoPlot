@@ -5,25 +5,19 @@ import { useLanguage } from '../contexts/LanguageContext';
 export const LAYERS = {
   STANDARD: {
     name: 'layer_standard',
-    url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-    attribution: '&copy; OpenStreetMap contributors',
-    maxNativeZoom: 19,
-    maxZoom: 19
+    id: 'roadmap'
   },
   SATELLITE: {
     name: 'layer_satellite',
-    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-    attribution: 'Tiles &copy; Esri',
-    maxNativeZoom: 18,
-    maxZoom: 18,
-    overlayUrl: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png' // Adds city/road labels over satellite
+    id: 'satellite'
   },
   TERRAIN: {
     name: 'layer_terrain',
-    url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
-    attribution: '&copy; OpenTopoMap',
-    maxNativeZoom: 17,
-    maxZoom: 17
+    id: 'terrain'
+  },
+  HYBRID: {
+    name: 'Hybrid',
+    id: 'hybrid'
   }
 };
 

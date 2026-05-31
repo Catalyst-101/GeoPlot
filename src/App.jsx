@@ -1,4 +1,8 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
+import { useJsApiLoader } from '@react-google-maps/api';
+
+const libraries = ['places', 'geometry', 'drawing'];
+
 import MapView from './components/MapView';
 import AreaPanel from './components/AreaPanel';
 import SearchBar from './components/SearchBar';
@@ -7,26 +11,32 @@ import HistoryPanel from './components/HistoryPanel';
 import { useAreaCalculator } from './hooks/useAreaCalculator';
 import { useLanguage } from './contexts/LanguageContext';
 import { useTheme } from './contexts/ThemeContext';
-import { Map, Menu, X, Edit3, Trash2, XCircle, PenTool, Sun, Moon, Check, X as CancelIcon } from 'lucide-react';
+import { Map, Menu, Edit3, Trash2, XCircle, PenTool, Sun, Moon, Check, X as CancelIcon, Info } from 'lucide-react';
 import logoDark from './assets/images/logo-dark.png';
 import logoLight from './assets/images/logo-light.png';
 
 function App() {
+  const { isLoaded, loadError } = useJsApiLoader({
+    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY,
+    libraries,
+  });
+
   const {
-    polygon,
-    areas,
-    perimeters,
-    vertexCount,
-    calculatePolygonData,
-    clearPolygon
+    polygons,
+    addPolygon,
+    updatePolygon,
+    removePolygon,
+    clearPolygons
   } = useAreaCalculator();
 
   const [searchedLocation, setSearchedLocation] = useState(null);
   const [currentLayer, setCurrentLayer] = useState(LAYERS.STANDARD);
   const [history, setHistory] = useState([]);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [activeMode, setActiveMode] = useState(null); // 'draw', 'edit', 'delete'
+  const [activeMode, setActiveMode] = useState(null); // 'draw', 'edit'
   const [pointers, setPointers] = useState([]);
+  const [selectedPolygonId, setSelectedPolygonId] = useState(null);
+  const [toast, setToast] = useState(null);
   const mapRef = useRef();
 
   const { t, language, setLanguage } = useLanguage();
@@ -42,32 +52,84 @@ function App() {
     }
   }, []);
 
-  const handlePolygonCalculated = useCallback((geojson) => {
-    const data = calculatePolygonData(geojson);
-    if (data) {
-      setHistory(prev => {
-        // Prevent adding duplicate if it's just an edit update of the same polygon shape
-        // In a real app we'd update the existing history item if we're in 'edit' mode.
-        // For simplicity, we add new history on save or draw finish.
-        const newHistory = [{ id: Date.now(), date: new Date().toISOString(), ...data }, ...prev];
-        return newHistory.slice(0, 50);
-      });
-      if (activeMode === 'draw') {
-        setMobileMenuOpen(true);
-      }
-    }
-  }, [calculatePolygonData, activeMode]);
+  const showToast = useCallback((msg, type = 'info') => {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 4000);
+  }, []);
 
-  const handleClearPolygon = useCallback(() => {
-    clearPolygon();
-  }, [clearPolygon]);
+  const handlePolygonComplete = useCallback((coords) => {
+    const success = addPolygon(coords);
+    if (!success) {
+      showToast(t('invalid_polygon') || 'Invalid polygon. Need at least 3 points.', 'error');
+    } else {
+      showToast('Polygon created successfully.', 'success');
+      // Adding to history conceptually, just using last item of array in real scenario
+    }
+    setActiveMode(null);
+    if (mobileMenuOpen) setMobileMenuOpen(false);
+  }, [addPolygon, t, showToast, mobileMenuOpen]);
+
+  const handlePolygonEdit = useCallback((id, coords) => {
+    updatePolygon(id, coords);
+  }, [updatePolygon]);
+
+  const handleClearAllPolygons = useCallback(() => {
+    clearPolygons();
+    setSelectedPolygonId(null);
+    showToast('All polygons cleared.', 'info');
+  }, [clearPolygons, showToast]);
 
   const handleDeleteHistoryItem = (id) => {
     setHistory(prev => prev.filter(item => item.id !== id));
   };
 
+  const startDraw = () => {
+    setActiveMode('draw');
+    setSelectedPolygonId(null);
+    mapRef.current?.startDraw();
+    setMobileMenuOpen(false);
+  };
+
+  const startEdit = () => {
+    if (!selectedPolygonId) {
+      showToast('Please select a polygon to edit first.', 'error');
+      return;
+    }
+    setActiveMode('edit');
+    mapRef.current?.startEdit(selectedPolygonId);
+    setMobileMenuOpen(false);
+  };
+
+  const deleteSelected = () => {
+    if (!selectedPolygonId) {
+      showToast('Please select a polygon to delete first.', 'error');
+      return;
+    }
+    removePolygon(selectedPolygonId);
+    setSelectedPolygonId(null);
+    showToast('Polygon deleted.', 'success');
+    setMobileMenuOpen(false);
+  };
+
+  if (loadError) return <div className="flex h-screen items-center justify-center bg-background text-danger font-bold text-xl">Error loading Google Maps API</div>;
+  if (!isLoaded) return <div className="flex h-screen items-center justify-center bg-background"><div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full"></div></div>;
+
   return (
     <div className={`flex h-screen w-full bg-background overflow-hidden relative text-text ${language === 'ur' ? 'font-urdu' : ''}`}>
+
+      {/* Toast Notification */}
+      {toast && (
+        <div className="absolute top-16 left-1/2 -translate-x-1/2 z-[3000] animate-in fade-in slide-in-from-top-4">
+          <div className={`px-4 py-2 rounded-full shadow-lg border flex items-center gap-2 text-sm font-bold backdrop-blur-md ${
+            toast.type === 'error' ? 'bg-danger/90 border-danger text-white' : 
+            toast.type === 'success' ? 'bg-primary/90 border-primary text-white' : 
+            'bg-surface/90 border-border text-text'
+          }`}>
+            <Info className="w-4 h-4" />
+            {toast.msg}
+          </div>
+        </div>
+      )}
 
       {/* Mobile Top Header */}
       <div className="lg:hidden absolute top-0 left-0 w-full z-[2000] bg-surface/90 backdrop-blur border-b border-border p-3 flex justify-between items-center shadow-sm">
@@ -131,13 +193,12 @@ function App() {
               <div className="flex items-center gap-2 text-primary font-bold mb-3">
                 {activeMode === 'draw' && <><PenTool className="w-4 h-4" /> {t('active_draw')}</>}
                 {activeMode === 'edit' && <><Edit3 className="w-4 h-4" /> {t('active_edit')}</>}
-                {activeMode === 'delete' && <><Trash2 className="w-4 h-4" /> {t('active_delete')}</>}
               </div>
               <div className="flex gap-2">
-                <button onClick={() => mapRef.current?.save()} className="flex-1 flex items-center justify-center gap-1 py-2 bg-primary text-surface rounded-lg font-bold text-sm hover:brightness-110">
+                <button onClick={() => { mapRef.current?.save(); setActiveMode(null); }} className="flex-1 flex items-center justify-center gap-1 py-2 bg-primary text-surface rounded-lg font-bold text-sm hover:brightness-110">
                   <Check className="w-4 h-4" /> {t('save')}
                 </button>
-                <button onClick={() => mapRef.current?.cancel()} className="flex-1 flex items-center justify-center gap-1 py-2 bg-surface text-text border border-border rounded-lg font-bold text-sm hover:bg-surface-soft">
+                <button onClick={() => { mapRef.current?.cancel(); setActiveMode(null); showToast(`Polygon ${activeMode} cancelled.`, 'info'); }} className="flex-1 flex items-center justify-center gap-1 py-2 bg-surface text-text border border-border rounded-lg font-bold text-sm hover:bg-surface-soft">
                   <CancelIcon className="w-4 h-4" /> {t('cancel')}
                 </button>
               </div>
@@ -153,6 +214,7 @@ function App() {
                 setMobileMenuOpen(false);
               }}
               searchedLocation={searchedLocation}
+              showToast={showToast}
             />
           </section>
 
@@ -160,39 +222,32 @@ function App() {
           <section className={activeMode ? 'hidden' : 'block'}>
             <p className="text-[10px] font-bold text-muted uppercase tracking-widest mb-2">{t('tools')}</p>
             <div className="grid grid-cols-2 gap-2">
-              <button onClick={() => { mapRef.current?.startDraw(); setMobileMenuOpen(false); }} className="flex items-center gap-2 p-2 bg-primary/10 hover:bg-primary/20 text-primary rounded-lg border border-primary/20 transition-colors text-sm font-medium">
+              <button onClick={startDraw} className="flex items-center gap-2 p-2 bg-primary/10 hover:bg-primary/20 text-primary rounded-lg border border-primary/20 transition-colors text-sm font-medium">
                 <PenTool className="w-4 h-4" /> {t('draw_polygon')}
               </button>
-              <button onClick={() => { mapRef.current?.startEdit(); setMobileMenuOpen(false); }} className="flex items-center gap-2 p-2 bg-surface hover:bg-surface-soft text-text rounded-lg border border-border transition-colors text-sm font-medium">
+              <button onClick={startEdit} className="flex items-center gap-2 p-2 bg-surface hover:bg-surface-soft text-text rounded-lg border border-border transition-colors text-sm font-medium">
                 <Edit3 className="w-4 h-4" /> {t('edit_polygon')}
               </button>
-              <button onClick={() => { mapRef.current?.startDelete(); setMobileMenuOpen(false); }} className="flex items-center gap-2 p-2 bg-surface hover:bg-surface-soft text-text rounded-lg border border-border transition-colors text-sm font-medium">
-                <Trash2 className="w-4 h-4 text-danger" /> {t('delete_polygon')}
+              <button onClick={deleteSelected} className="flex items-center gap-2 p-2 bg-surface hover:bg-surface-soft text-text rounded-lg border border-border transition-colors text-sm font-medium">
+                <Trash2 className="w-4 h-4 text-danger" /> Delete Selected
               </button>
-              <button onClick={() => mapRef.current?.clearAll()} className="flex items-center gap-2 p-2 bg-danger/10 hover:bg-danger/20 text-danger rounded-lg border border-danger/20 transition-colors text-sm font-medium">
-                <XCircle className="w-4 h-4" /> {t('clear_polygon') || t('clear_all')}
+              <button onClick={handleClearAllPolygons} className="flex items-center gap-2 p-2 bg-danger/10 hover:bg-danger/20 text-danger rounded-lg border border-danger/20 transition-colors text-sm font-medium">
+                <XCircle className="w-4 h-4" /> {t('clear_all')}
               </button>
-              <button onClick={() => setPointers([])} className="col-span-2 flex items-center justify-center gap-2 p-2 bg-danger/10 hover:bg-danger/20 text-danger rounded-lg border border-danger/20 transition-colors text-sm font-medium">
+              <button onClick={() => { setPointers([]); setSearchedLocation(null); }} className="col-span-2 flex items-center justify-center gap-2 p-2 bg-danger/10 hover:bg-danger/20 text-danger rounded-lg border border-danger/20 transition-colors text-sm font-medium">
                 <Map className="w-4 h-4" /> {t('clear_pointers') || 'Clear All Pointers'}
               </button>
             </div>
           </section>
 
           {/* Area Results */}
-          {polygon ? (
-            <section className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-              <p className="text-[10px] font-bold text-muted uppercase tracking-widest mb-2">{t('area_results')}</p>
-              <AreaPanel
-                areas={areas}
-                perimeters={perimeters}
-                vertexCount={vertexCount}
-              />
-            </section>
-          ) : (
-            <section className={`bg-background rounded-xl p-6 text-center border border-border border-dashed ${activeMode ? 'opacity-50' : ''}`}>
-              <p className="text-sm text-muted">{t('use_drawing_tools')}</p>
-            </section>
-          )}
+          <section className={`animate-in fade-in duration-500 ${activeMode ? 'opacity-50' : ''}`}>
+            <p className="text-[10px] font-bold text-muted uppercase tracking-widest mb-2">{t('area_results')}</p>
+            <AreaPanel
+              polygons={polygons}
+              selectedPolygonId={selectedPolygonId}
+            />
+          </section>
 
           {/* History */}
           <section className={activeMode ? 'opacity-50 pointer-events-none' : ''}>
@@ -210,15 +265,18 @@ function App() {
       <main className="flex-1 relative h-full ltr:lg:ml-[380px] rtl:lg:mr-[380px]">
         <MapView
           ref={mapRef}
-          onPolygonCalculated={handlePolygonCalculated}
-          onClearPolygon={handleClearPolygon}
+          polygons={polygons}
+          selectedPolygonId={selectedPolygonId}
+          setSelectedPolygonId={setSelectedPolygonId}
+          onPolygonComplete={handlePolygonComplete}
+          onPolygonEdit={handlePolygonEdit}
           searchedLocation={searchedLocation}
           setSearchedLocation={setSearchedLocation}
           currentLayer={currentLayer}
           onLayerChange={setCurrentLayer}
-          onActiveModeChange={setActiveMode}
           pointers={pointers}
           setPointers={setPointers}
+          activeMode={activeMode}
         />
       </main>
 
