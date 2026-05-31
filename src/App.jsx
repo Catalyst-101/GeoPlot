@@ -9,7 +9,6 @@ import SearchBar from './components/SearchBar';
 import { LAYERS } from './components/LayerSwitcher';
 import HistoryPanel from './components/HistoryPanel';
 import { useAreaCalculator } from './hooks/useAreaCalculator';
-import { useLanguage } from './contexts/LanguageContext';
 import { useTheme } from './contexts/ThemeContext';
 import { Map, Menu, Edit3, Trash2, XCircle, PenTool, Sun, Moon, Check, X as CancelIcon, Info } from 'lucide-react';
 import logoDark from './assets/images/logo-dark.png';
@@ -26,7 +25,8 @@ function App() {
     addPolygon,
     updatePolygon,
     removePolygon,
-    clearPolygons
+    clearPolygons,
+    setPolygons
   } = useAreaCalculator();
 
   const [searchedLocation, setSearchedLocation] = useState(null);
@@ -39,7 +39,6 @@ function App() {
   const [toast, setToast] = useState(null);
   const mapRef = useRef();
 
-  const { t, language, setLanguage } = useLanguage();
   const { theme, toggleTheme } = useTheme();
 
   useEffect(() => {
@@ -58,20 +57,46 @@ function App() {
   }, []);
 
   const handlePolygonComplete = useCallback((coords) => {
-    const success = addPolygon(coords);
-    if (!success) {
-      showToast(t('invalid_polygon') || 'Invalid polygon. Need at least 3 points.', 'error');
+    const newPoly = addPolygon(coords);
+    if (!newPoly) {
+      showToast('Invalid polygon. Need at least 3 points.', 'error');
     } else {
       showToast('Polygon created successfully.', 'success');
-      // Adding to history conceptually, just using last item of array in real scenario
+      
+      const now = new Date();
+      setHistory(prev => [{
+        id: newPoly.id,
+        date: now.toLocaleDateString(),
+        time: now.toLocaleTimeString(),
+        areas: newPoly.areas,
+        perimeters: newPoly.perimeters,
+        vertexCount: newPoly.vertexCount,
+        coords: newPoly.coords
+      }, ...prev]);
     }
     setActiveMode(null);
     if (mobileMenuOpen) setMobileMenuOpen(false);
-  }, [addPolygon, t, showToast, mobileMenuOpen]);
+  }, [addPolygon, showToast, mobileMenuOpen]);
 
   const handlePolygonEdit = useCallback((id, coords) => {
     updatePolygon(id, coords);
   }, [updatePolygon]);
+
+  const handlePolygonEditComplete = useCallback((id) => {
+    const p = polygons.find(poly => poly.id === id);
+    if (!p) return;
+    const now = new Date();
+    setHistory(prev => [{
+      id: p.id + '-' + Date.now(), // Unique ID so it's a separate history entry
+      date: now.toLocaleDateString(),
+      time: now.toLocaleTimeString(),
+      areas: p.areas,
+      perimeters: p.perimeters,
+      vertexCount: p.vertexCount,
+      coords: p.coords
+    }, ...prev]);
+    showToast('Edit saved to history.', 'success');
+  }, [polygons, showToast]);
 
   const handleClearAllPolygons = useCallback(() => {
     clearPolygons();
@@ -81,6 +106,25 @@ function App() {
 
   const handleDeleteHistoryItem = (id) => {
     setHistory(prev => prev.filter(item => item.id !== id));
+  };
+
+  const handleSelectMeasurement = (item) => {
+    if (!polygons.some(p => p.id === item.id)) {
+      setPolygons(prev => [...prev, {
+        id: item.id,
+        color: '#3B82F6',
+        coords: item.coords,
+        areas: item.areas,
+        perimeters: item.perimeters,
+        vertexCount: item.vertexCount,
+      }]);
+    }
+    
+    setSelectedPolygonId(item.id);
+    if (item.coords && item.coords.length > 0) {
+      mapRef.current?.panToPolygon(item.coords);
+    }
+    setMobileMenuOpen(false);
   };
 
   const startDraw = () => {
@@ -115,7 +159,7 @@ function App() {
   if (!isLoaded) return <div className="flex h-screen items-center justify-center bg-background"><div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full"></div></div>;
 
   return (
-    <div className={`flex h-screen w-full bg-background overflow-hidden relative text-text ${language === 'ur' ? 'font-urdu' : ''}`}>
+    <div className="flex h-screen w-full bg-background overflow-hidden relative text-text">
 
       {/* Toast Notification */}
       {toast && (
@@ -137,7 +181,7 @@ function App() {
           <div className="w-8 h-8 flex items-center justify-center">
             <img src={theme === 'dark' ? logoDark : logoLight} alt="GeoPlot Logo" className="w-full h-full object-contain drop-shadow-sm" />
           </div>
-          <h1 className="font-bold text-lg text-primary tracking-tight">{t('app_title')}</h1>
+          <h1 className="font-bold text-lg text-primary tracking-tight">GeoPlot</h1>
         </div>
         <button
           onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
@@ -160,25 +204,19 @@ function App() {
               <img src={theme === 'dark' ? logoDark : logoLight} alt="GeoPlot Logo" className="w-full h-full object-contain drop-shadow-sm" />
             </div>
             <div>
-              <h1 className="font-black text-2xl text-primary tracking-tight leading-none">{t('app_title')}</h1>
-              <p className="text-xs font-medium text-muted mt-1">{t('app_subtitle')}</p>
+              <h1 className="font-black text-2xl text-primary tracking-tight leading-none">GeoPlot</h1>
+              <p className="text-xs font-medium text-muted mt-1">Precision Measurement</p>
             </div>
           </div>
           <div className="flex gap-2">
-            <button onClick={() => setLanguage(language === 'en' ? 'ur' : 'en')} className="px-2 py-1 bg-surface-soft border border-border rounded text-xs font-bold hover:bg-background">
-              {language === 'en' ? 'اردو' : 'EN'}
-            </button>
             <button onClick={toggleTheme} className="p-1.5 bg-surface-soft border border-border rounded text-primary hover:bg-background">
               {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
             </button>
           </div>
         </div>
 
-        {/* Header Mobile Toolbar (Language/Theme) */}
+        {/* Header Mobile Toolbar (Theme) */}
         <div className="lg:hidden flex items-center justify-end gap-2 p-3 border-b border-border bg-surface">
-          <button onClick={() => setLanguage(language === 'en' ? 'ur' : 'en')} className="px-2 py-1 bg-surface-soft border border-border rounded text-xs font-bold hover:bg-background">
-            {language === 'en' ? 'اردو' : 'EN'}
-          </button>
           <button onClick={toggleTheme} className="p-1.5 bg-surface-soft border border-border rounded text-primary hover:bg-background">
             {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
           </button>
@@ -191,15 +229,15 @@ function App() {
           {activeMode && (
             <div className="bg-primary/10 border border-primary/20 rounded-xl p-4 animate-in fade-in slide-in-from-top-2">
               <div className="flex items-center gap-2 text-primary font-bold mb-3">
-                {activeMode === 'draw' && <><PenTool className="w-4 h-4" /> {t('active_draw')}</>}
-                {activeMode === 'edit' && <><Edit3 className="w-4 h-4" /> {t('active_edit')}</>}
+                {activeMode === 'draw' && <><PenTool className="w-4 h-4" /> Drawing Active</>}
+                {activeMode === 'edit' && <><Edit3 className="w-4 h-4" /> Editing Active</>}
               </div>
               <div className="flex gap-2">
                 <button onClick={() => { mapRef.current?.save(); setActiveMode(null); }} className="flex-1 flex items-center justify-center gap-1 py-2 bg-primary text-surface rounded-lg font-bold text-sm hover:brightness-110">
-                  <Check className="w-4 h-4" /> {t('save')}
+                  <Check className="w-4 h-4" /> Save
                 </button>
                 <button onClick={() => { mapRef.current?.cancel(); setActiveMode(null); showToast(`Polygon ${activeMode} cancelled.`, 'info'); }} className="flex-1 flex items-center justify-center gap-1 py-2 bg-surface text-text border border-border rounded-lg font-bold text-sm hover:bg-surface-soft">
-                  <CancelIcon className="w-4 h-4" /> {t('cancel')}
+                  <CancelIcon className="w-4 h-4" /> Cancel
                 </button>
               </div>
             </div>
@@ -207,7 +245,7 @@ function App() {
 
           {/* Search Section */}
           <section className={activeMode ? 'opacity-50 pointer-events-none' : ''}>
-            <p className="text-[10px] font-bold text-muted uppercase tracking-widest mb-2">{t('location_search')}</p>
+            <p className="text-[10px] font-bold text-muted uppercase tracking-widest mb-2">Location Search</p>
             <SearchBar
               onLocationSelect={(loc) => {
                 setSearchedLocation(loc);
@@ -220,29 +258,29 @@ function App() {
 
           {/* Drawing Tools */}
           <section className={activeMode ? 'hidden' : 'block'}>
-            <p className="text-[10px] font-bold text-muted uppercase tracking-widest mb-2">{t('tools')}</p>
+            <p className="text-[10px] font-bold text-muted uppercase tracking-widest mb-2">Tools</p>
             <div className="grid grid-cols-2 gap-2">
               <button onClick={startDraw} className="flex items-center gap-2 p-2 bg-primary/10 hover:bg-primary/20 text-primary rounded-lg border border-primary/20 transition-colors text-sm font-medium">
-                <PenTool className="w-4 h-4" /> {t('draw_polygon')}
+                <PenTool className="w-4 h-4" /> Draw Shape
               </button>
               <button onClick={startEdit} className="flex items-center gap-2 p-2 bg-surface hover:bg-surface-soft text-text rounded-lg border border-border transition-colors text-sm font-medium">
-                <Edit3 className="w-4 h-4" /> {t('edit_polygon')}
+                <Edit3 className="w-4 h-4" /> Edit Shape
               </button>
               <button onClick={deleteSelected} className="flex items-center gap-2 p-2 bg-surface hover:bg-surface-soft text-text rounded-lg border border-border transition-colors text-sm font-medium">
                 <Trash2 className="w-4 h-4 text-danger" /> Delete Selected
               </button>
               <button onClick={handleClearAllPolygons} className="flex items-center gap-2 p-2 bg-danger/10 hover:bg-danger/20 text-danger rounded-lg border border-danger/20 transition-colors text-sm font-medium">
-                <XCircle className="w-4 h-4" /> {t('clear_all')}
+                <XCircle className="w-4 h-4" /> Clear All
               </button>
               <button onClick={() => { setPointers([]); setSearchedLocation(null); }} className="col-span-2 flex items-center justify-center gap-2 p-2 bg-danger/10 hover:bg-danger/20 text-danger rounded-lg border border-danger/20 transition-colors text-sm font-medium">
-                <Map className="w-4 h-4" /> {t('clear_pointers') || 'Clear All Pointers'}
+                <Map className="w-4 h-4" /> Clear All Pointers
               </button>
             </div>
           </section>
 
           {/* Area Results */}
           <section className={`animate-in fade-in duration-500 ${activeMode ? 'opacity-50' : ''}`}>
-            <p className="text-[10px] font-bold text-muted uppercase tracking-widest mb-2">{t('area_results')}</p>
+            <p className="text-[10px] font-bold text-muted uppercase tracking-widest mb-2">Area Results</p>
             <AreaPanel
               polygons={polygons}
               selectedPolygonId={selectedPolygonId}
@@ -255,7 +293,7 @@ function App() {
               history={history}
               onClearHistory={() => setHistory([])}
               onDeleteHistoryItem={handleDeleteHistoryItem}
-              onSelectMeasurement={(item) => console.log('View', item)}
+              onSelectMeasurement={handleSelectMeasurement}
             />
           </section>
         </div>
@@ -270,6 +308,7 @@ function App() {
           setSelectedPolygonId={setSelectedPolygonId}
           onPolygonComplete={handlePolygonComplete}
           onPolygonEdit={handlePolygonEdit}
+          onPolygonEditComplete={handlePolygonEditComplete}
           searchedLocation={searchedLocation}
           setSearchedLocation={setSearchedLocation}
           currentLayer={currentLayer}
@@ -277,6 +316,7 @@ function App() {
           pointers={pointers}
           setPointers={setPointers}
           activeMode={activeMode}
+          showToast={showToast}
         />
       </main>
 

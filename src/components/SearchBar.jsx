@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Share2 } from 'lucide-react';
-import { useLanguage } from '../contexts/LanguageContext';
 
 const SearchBar = ({ onLocationSelect, searchedLocation, showToast }) => {
   const [query, setQuery] = useState('');
@@ -8,7 +7,6 @@ const SearchBar = ({ onLocationSelect, searchedLocation, showToast }) => {
   const [lng, setLng] = useState('');
   const [results, setResults] = useState([]);
   const [isOpen, setIsOpen] = useState(false);
-  const { t } = useLanguage();
   const [autocompleteService, setAutocompleteService] = useState(null);
   const [geocoder, setGeocoder] = useState(null);
 
@@ -41,9 +39,6 @@ const SearchBar = ({ onLocationSelect, searchedLocation, showToast }) => {
             setIsOpen(true);
           } else {
             setResults([]);
-            if (status === window.google.maps.places.PlacesServiceStatus.ZERO_RESULTS) {
-               // Optional: Show "No results found"
-            }
           }
         }
       );
@@ -51,23 +46,40 @@ const SearchBar = ({ onLocationSelect, searchedLocation, showToast }) => {
   };
 
   const handleSelect = (prediction) => {
-    if (!geocoder) return;
-    
     setQuery(prediction.description.split(',')[0]);
     setIsOpen(false);
 
-    geocoder.geocode({ placeId: prediction.place_id }, (results, status) => {
-      if (status === window.google.maps.GeocoderStatus.OK && results[0]) {
-        const place = results[0];
-        onLocationSelect({
-          lat: place.geometry.location.lat(),
-          lon: place.geometry.location.lng(),
-          name: place.formatted_address
-        });
-      } else {
-        if (showToast) showToast('Search failed or location not found.', 'error');
+    const dummyDiv = document.createElement('div');
+    const placesService = new window.google.maps.places.PlacesService(dummyDiv);
+
+    placesService.getDetails(
+      { placeId: prediction.place_id, fields: ['geometry', 'formatted_address', 'name'] },
+      (place, status) => {
+        if (status === window.google.maps.places.PlacesServiceStatus.OK && place.geometry) {
+          onLocationSelect({
+            lat: place.geometry.location.lat(),
+            lon: place.geometry.location.lng(),
+            name: place.formatted_address || place.name
+          });
+        } else if (geocoder) {
+          // Fallback to Geocoder if Places details fail
+          geocoder.geocode({ placeId: prediction.place_id }, (results, gStatus) => {
+            if (gStatus === window.google.maps.GeocoderStatus.OK && results[0]) {
+              const res = results[0];
+              onLocationSelect({
+                lat: res.geometry.location.lat(),
+                lon: res.geometry.location.lng(),
+                name: res.formatted_address
+              });
+            } else {
+              if (showToast) showToast('Search failed or location not found.', 'error');
+            }
+          });
+        } else {
+          if (showToast) showToast('Search failed or location not found.', 'error');
+        }
       }
-    });
+    );
   };
 
   const handleGoToCoords = (e) => {
@@ -84,13 +96,18 @@ const SearchBar = ({ onLocationSelect, searchedLocation, showToast }) => {
   };
 
   const handleShare = () => {
-    if (searchedLocation) {
-      const url = new URL(window.location.href);
-      url.searchParams.set('lat', searchedLocation.lat);
-      url.searchParams.set('lng', searchedLocation.lon);
-      navigator.clipboard.writeText(url.toString());
-      if (showToast) showToast(t('link_copied'), 'success');
-      else alert(t('link_copied'));
+    if (!searchedLocation) return;
+    const shareUrl = `${window.location.origin}${window.location.pathname}?lat=${searchedLocation.lat}&lng=${searchedLocation.lon}`;
+    
+    if (navigator.share) {
+      navigator.share({
+        title: 'GeoPlot Shared Location',
+        url: shareUrl
+      }).catch(err => console.error('Share failed:', err));
+    } else {
+      navigator.clipboard.writeText(shareUrl)
+        .then(() => showToast('Link copied to clipboard!', 'success'))
+        .catch(() => showToast('Failed to copy link.', 'error'));
     }
   };
 
@@ -102,7 +119,7 @@ const SearchBar = ({ onLocationSelect, searchedLocation, showToast }) => {
             type="text"
             value={query}
             onChange={handleSearchChange}
-            placeholder={t('search_placeholder')}
+            placeholder="Search location..."
             className="w-full bg-surface border border-border rounded-lg py-2.5 ltr:pl-10 rtl:pr-10 ltr:pr-4 rtl:pl-4 text-text placeholder-muted focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all shadow-sm"
           />
           <div className="absolute ltr:left-3 rtl:right-3 top-1/2 -translate-y-1/2 text-muted">
@@ -133,7 +150,7 @@ const SearchBar = ({ onLocationSelect, searchedLocation, showToast }) => {
             step="any"
             value={lat}
             onChange={(e) => setLat(e.target.value)}
-            placeholder={t('lat')}
+            placeholder="Latitude"
             className="w-full bg-surface border border-border rounded-lg py-1.5 px-2 text-xs text-text placeholder-muted focus:border-primary focus:outline-none"
           />
           <input
@@ -141,18 +158,18 @@ const SearchBar = ({ onLocationSelect, searchedLocation, showToast }) => {
             step="any"
             value={lng}
             onChange={(e) => setLng(e.target.value)}
-            placeholder={t('lng')}
+            placeholder="Longitude"
             className="w-full bg-surface border border-border rounded-lg py-1.5 px-2 text-xs text-text placeholder-muted focus:border-primary focus:outline-none"
           />
           <button type="submit" className="bg-primary text-surface px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-primary/90 transition-colors flex items-center justify-center">
-            {t('go')}
+            Go
           </button>
         </form>
         <button 
           onClick={handleShare}
           disabled={!searchedLocation}
           className="p-2 border border-border rounded-lg bg-surface text-primary hover:bg-surface-soft disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          title={t('share_location')}
+          title="Share Location"
         >
           <Share2 className="w-4 h-4" />
         </button>

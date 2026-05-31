@@ -3,12 +3,11 @@
  * Base unit is square meters (from turf.area)
  */
 
-export const formatNumber = (num, decimals = 2) => {
-  if (num === undefined || num === null) return '0.00';
-  return num.toLocaleString('en-US', {
-    minimumFractionDigits: decimals,
-    maximumFractionDigits: decimals,
-  });
+export const formatMeasurement = (value) => {
+  if (value === null || value === undefined || isNaN(value)) {
+    return "0.000";
+  }
+  return Number(value).toFixed(3);
 };
 
 export const calculateAreas = (sqMeters) => {
@@ -54,14 +53,14 @@ export const calculateAreas = (sqMeters) => {
 
 export const formatAreas = (areas) => {
   return {
-    sqMeters: formatNumber(areas.sqMeters),
-    sqKm: formatNumber(areas.sqKm, 4),
-    ha: formatNumber(areas.ha),
-    sqFt: formatNumber(areas.sqFt),
-    sqYards: formatNumber(areas.sqYards),
-    acres: formatNumber(areas.acres),
-    marla: formatNumber(areas.marla),
-    kanal: formatNumber(areas.kanal),
+    sqMeters: formatMeasurement(areas.sqMeters),
+    sqKm: formatMeasurement(areas.sqKm),
+    ha: formatMeasurement(areas.ha),
+    sqFt: formatMeasurement(areas.sqFt),
+    sqYards: formatMeasurement(areas.sqYards),
+    acres: formatMeasurement(areas.acres),
+    marla: formatMeasurement(areas.marla),
+    kanal: formatMeasurement(areas.kanal),
   };
 };
 
@@ -77,8 +76,8 @@ export const calculatePerimeter = (meters) => {
 
 export const formatPerimeter = (perimeters) => {
   return {
-    m: formatNumber(perimeters.m),
-    km: formatNumber(perimeters.km, 3),
-    ft: formatNumber(perimeters.ft)
+    m: formatMeasurement(perimeters.m),
+    km: formatMeasurement(perimeters.km),
+    ft: formatMeasurement(perimeters.ft)
   };
 };

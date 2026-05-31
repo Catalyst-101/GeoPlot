@@ -52,5 +52,6 @@
   "clear_polygon": "Clear Polygon",
   "clear_pointers": "Clear All Pointers",
   "delete_pointer": "Delete",
-  "outdated_map_warning": "Map data may be outdated in some areas. Please verify important boundaries with local records or recent imagery."
+  "outdated_map_warning": "Map data may be outdated in some areas. Please verify important boundaries with local records or recent imagery.",
+  "layer_hybrid": "Hybrid"
 }

@@ -1,18 +1,17 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Layers } from 'lucide-react';
-import { useLanguage } from '../contexts/LanguageContext';
 
 export const LAYERS = {
   STANDARD: {
-    name: 'layer_standard',
+    name: 'Standard',
     id: 'roadmap'
   },
   SATELLITE: {
-    name: 'layer_satellite',
+    name: 'Satellite',
     id: 'satellite'
   },
   TERRAIN: {
-    name: 'layer_terrain',
+    name: 'Terrain',
     id: 'terrain'
   },
   HYBRID: {
@@ -23,7 +22,6 @@ export const LAYERS = {
 
 const LayerSwitcher = ({ currentLayer, onLayerChange }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const { t } = useLanguage();
   const dropdownRef = useRef(null);
 
   useEffect(() => {
@@ -41,7 +39,7 @@ const LayerSwitcher = ({ currentLayer, onLayerChange }) => {
       <button
         onClick={() => setIsOpen(!isOpen)}
         className={`bg-surface w-10 h-10 rounded-lg shadow-md flex items-center justify-center text-primary hover:bg-surface-soft transition-colors border-2 ${isOpen ? 'border-primary' : 'border-transparent'}`}
-        title={t('map_layers')}
+        title="Map Layers"
       >
         <Layers className="w-5 h-5" />
       </button>
@@ -49,7 +47,7 @@ const LayerSwitcher = ({ currentLayer, onLayerChange }) => {
       {isOpen && (
         <div className="absolute top-0 right-14 bg-surface/95 backdrop-blur shadow-lg rounded-xl p-2 w-40 border border-border flex flex-col gap-1">
           <p className="text-[10px] font-bold text-muted uppercase tracking-widest px-2 pb-1 mb-1 border-b border-border">
-            {t('map_layers')}
+            Map Layers
           </p>
           {Object.entries(LAYERS).map(([key, layer]) => (
             <button
@@ -64,7 +62,7 @@ const LayerSwitcher = ({ currentLayer, onLayerChange }) => {
                   : 'text-text hover:bg-surface-soft border border-transparent'
               }`}
             >
-              {t(layer.name)}
+              {layer.name}
             </button>
           ))}
         </div>

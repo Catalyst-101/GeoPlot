@@ -3,7 +3,6 @@ import * as turf from '@turf/turf';
 import { calculateAreas, calculatePerimeter } from '../utils/areaConversions';
 
 const POLYGON_COLORS = [
-  "#2563EB", // Blue
   "#16A34A", // Green
   "#DC2626", // Red
   "#9333EA", // Purple
@@ -66,15 +65,17 @@ export const useAreaCalculator = () => {
     const data = calculateData(coords);
     if (!data) return null;
 
+    let newPoly = null;
+
     setPolygons(prev => {
-      const newPoly = {
+      newPoly = {
         id: Date.now().toString() + Math.random().toString(36).substring(2, 9),
         ...data,
         color: POLYGON_COLORS[prev.length % POLYGON_COLORS.length]
       };
       return [...prev, newPoly];
     });
-    return true; // We don't return the ID because setPolygons is async
+    return newPoly;
   }, [calculateData]);
 
   const updatePolygon = useCallback((id, coords) => {

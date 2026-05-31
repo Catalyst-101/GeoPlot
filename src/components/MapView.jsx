@@ -1,17 +1,15 @@
 import React, { useEffect, useRef, useState, forwardRef, useImperativeHandle, useCallback } from 'react';
-import { GoogleMap, Marker, InfoWindow, Polygon, DrawingManager } from '@react-google-maps/api';
+import { GoogleMap, Marker, InfoWindow, Polygon } from '@react-google-maps/api';
 import LayerSwitcher, { LAYERS } from './LayerSwitcher';
-import { useLanguage } from '../contexts/LanguageContext';
 import { Navigation2, Share2, Copy } from 'lucide-react';
 
-const CustomLocateControl = ({ setSearchedLocation }) => {
+const CustomLocateControl = ({ setSearchedLocation, showToast }) => {
   const [isLocating, setIsLocating] = useState(false);
-  const { t } = useLanguage();
 
   const handleLocate = () => {
     setIsLocating(true);
     if (!navigator.geolocation) {
-      alert(t('locate_me_error'));
+      if (showToast) showToast('Geolocation denied.', 'error');
       setIsLocating(false);
       return;
     }
@@ -24,13 +22,9 @@ const CustomLocateControl = ({ setSearchedLocation }) => {
       },
       (error) => {
         setIsLocating(false);
-        alert(t('locate_me_error') + " " + error.message);
+        if (showToast) showToast("Locate me error: " + error.message, 'error');
       },
-      {
-        enableHighAccuracy: true,
-        timeout: 15000,
-        maximumAge: 0
-      }
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
     );
   };
 
@@ -61,26 +55,26 @@ const MapView = forwardRef(({
   setSelectedPolygonId,
   onPolygonComplete,
   onPolygonEdit,
+  onPolygonEditComplete,
   searchedLocation,
   setSearchedLocation,
   currentLayer,
   onLayerChange,
   activeMode,
   pointers,
-  setPointers
+  setPointers,
+  showToast
 }, ref) => {
   const mapRef = useRef(null);
-  const drawingManagerRef = useRef(null);
-  const polygonRefs = useRef({});
-  const polygonListeners = useRef({});
   
-  const { t, language } = useLanguage();
   const [center, setCenter] = useState({ lat: 30.3753, lng: 69.3451 });
   const [zoom, setZoom] = useState(6);
   const [mouseCoords, setMouseCoords] = useState(null);
   
-  // Backup coords for cancel edit
+  // Custom Drawing State
+  const [drawCoords, setDrawCoords] = useState([]);
   const [editBackupCoords, setEditBackupCoords] = useState(null);
+  const [activeMidpointDrag, setActiveMidpointDrag] = useState(null);
   
   const pressTimer = useRef(null);
   const pressTimeout = 700;
@@ -90,8 +84,9 @@ const MapView = forwardRef(({
     zoomControl: true,
     mapTypeId: currentLayer.id,
     gestureHandling: 'greedy',
-    maxZoom: null, // Allow deep zoom
-    minZoom: null
+    maxZoom: null,
+    minZoom: null,
+    draggableCursor: activeMode === 'draw' ? 'crosshair' : 'grab',
   };
 
   const onLoad = useCallback((map) => {
@@ -100,61 +95,67 @@ const MapView = forwardRef(({
 
   const onUnmount = useCallback(() => {
     mapRef.current = null;
-    // Cleanup listeners
-    Object.values(polygonListeners.current).forEach(listeners => {
-      listeners.forEach(l => window.google.maps.event.removeListener(l));
-    });
-    polygonListeners.current = {};
   }, []);
 
   useEffect(() => {
     if (searchedLocation && mapRef.current) {
-      setCenter({ lat: searchedLocation.lat, lng: searchedLocation.lon });
-      setZoom(16);
+      mapRef.current.panTo({ lat: searchedLocation.lat, lng: searchedLocation.lon });
+      mapRef.current.setZoom(16);
     }
   }, [searchedLocation]);
 
   useImperativeHandle(ref, () => ({
     startDraw: () => {
-      if (drawingManagerRef.current) {
-        drawingManagerRef.current.setDrawingMode(window.google.maps.drawing.OverlayType.POLYGON);
-      }
+      setDrawCoords([]);
     },
     startEdit: (polygonId) => {
       const p = polygons.find(p => p.id === polygonId);
-      if (p) {
-        setEditBackupCoords([...p.coords]);
-      }
+      if (p) setEditBackupCoords([...p.coords]);
     },
     save: () => {
-      if (drawingManagerRef.current) {
-        drawingManagerRef.current.setDrawingMode(null);
-      }
       setEditBackupCoords(null);
+      if (activeMode === 'draw' && drawCoords.length >= 3) {
+        onPolygonComplete([...drawCoords]);
+      } else if (activeMode === 'edit' && selectedPolygonId) {
+        if (onPolygonEditComplete) {
+          onPolygonEditComplete(selectedPolygonId);
+        }
+      }
+      setDrawCoords([]);
     },
     cancel: () => {
-      if (drawingManagerRef.current) {
-        drawingManagerRef.current.setDrawingMode(null);
-      }
       if (activeMode === 'edit' && selectedPolygonId && editBackupCoords) {
-        // Restore coordinates
         onPolygonEdit(selectedPolygonId, editBackupCoords);
       }
+      setDrawCoords([]);
       setEditBackupCoords(null);
+    },
+    panToPolygon: (coords) => {
+      if (mapRef.current && coords && coords.length > 0) {
+        // Calculate bounds
+        const bounds = new window.google.maps.LatLngBounds();
+        coords.forEach(c => bounds.extend(c));
+        mapRef.current.fitBounds(bounds);
+      }
     }
   }));
 
-  const handleDrawComplete = (polygon) => {
-    const path = polygon.getPath().getArray();
-    const coords = path.map(p => ({ lat: p.lat(), lng: p.lng() }));
+  const handleMapClick = (e) => {
+    if (!e.latLng) return;
     
-    polygon.setMap(null); // remove google drawing polygon
-    
-    if (drawingManagerRef.current) {
-      drawingManagerRef.current.setDrawingMode(null);
+    if (activeMode === 'draw') {
+      setDrawCoords(prev => [...prev, { lat: e.latLng.lat(), lng: e.latLng.lng() }]);
+    } else if (activeMode !== 'edit') {
+      setSelectedPolygonId(null); // Deselect if clicking empty space
     }
-    
-    onPolygonComplete(coords);
+  };
+
+  const handleDrawFinish = (e) => {
+    if (e) e.domEvent.stopPropagation();
+    if (drawCoords.length >= 3) {
+      onPolygonComplete([...drawCoords]);
+      setDrawCoords([]);
+    }
   };
 
   const handlePolygonClick = (id) => {
@@ -163,31 +164,69 @@ const MapView = forwardRef(({
     }
   };
 
-  const attachPolygonListeners = (polygonInstance, id) => {
-    if (!polygonInstance) return;
-    polygonRefs.current[id] = polygonInstance;
-    
-    // Clear old listeners if they exist
-    if (polygonListeners.current[id]) {
-      polygonListeners.current[id].forEach(l => window.google.maps.event.removeListener(l));
-    }
-    
-    const path = polygonInstance.getPath();
-    
-    const updateHandler = () => {
-      if (activeMode === 'edit' && selectedPolygonId === id) {
-        const coords = path.getArray().map(p => ({ lat: p.lat(), lng: p.lng() }));
-        onPolygonEdit(id, coords);
-      }
-    };
+  const handleVertexDrag = (e, polyId, vertexIndex) => {
+    const p = polygons.find(p => p.id === polyId);
+    if (!p) return;
+    const newCoords = [...p.coords];
+    newCoords[vertexIndex] = { lat: e.latLng.lat(), lng: e.latLng.lng() };
+    onPolygonEdit(polyId, newCoords);
+  };
 
-    const listeners = [
-      path.addListener('set_at', updateHandler),
-      path.addListener('insert_at', updateHandler),
-      path.addListener('remove_at', updateHandler)
-    ];
-    
-    polygonListeners.current[id] = listeners;
+  const handleVertexRightClick = (polyId, vertexIndex) => {
+    const p = polygons.find(p => p.id === polyId);
+    if (!p) return;
+    if (p.coords.length <= 3) {
+      if (showToast) showToast('A polygon must have at least 3 vertices.', 'error');
+      return;
+    }
+    const newCoords = [...p.coords];
+    newCoords.splice(vertexIndex, 1);
+    onPolygonEdit(polyId, newCoords);
+  };
+
+  const handleMidpointClick = (e, polyId, insertIndex) => {
+    const p = polygons.find(p => p.id === polyId);
+    if (!p) return;
+    const newCoords = [...p.coords];
+    newCoords.splice(insertIndex, 0, { lat: e.latLng.lat(), lng: e.latLng.lng() });
+    onPolygonEdit(polyId, newCoords);
+  };
+
+  const handleMidpointDragStart = (e, polyId, insertIndex) => {
+    setActiveMidpointDrag({ polyId, insertIndex, lat: e.latLng.lat(), lng: e.latLng.lng() });
+  };
+
+  const handleMidpointDrag = (e) => {
+    if (activeMidpointDrag) {
+      setActiveMidpointDrag(prev => ({ ...prev, lat: e.latLng.lat(), lng: e.latLng.lng() }));
+    }
+  };
+
+  const handleMidpointDragEnd = (e, polyId, insertIndex) => {
+    const p = polygons.find(p => p.id === polyId);
+    if (!p) {
+      setActiveMidpointDrag(null);
+      return;
+    }
+    const newCoords = [...p.coords];
+    newCoords.splice(insertIndex, 0, { lat: e.latLng.lat(), lng: e.latLng.lng() });
+    onPolygonEdit(polyId, newCoords);
+    setActiveMidpointDrag(null);
+  };
+
+  const getMidpoints = (coords) => {
+    if (!coords || coords.length < 3) return [];
+    const midpoints = [];
+    for (let i = 0; i < coords.length; i++) {
+      const p1 = coords[i];
+      const p2 = coords[(i + 1) % coords.length];
+      midpoints.push({
+        lat: (p1.lat + p2.lat) / 2,
+        lng: (p1.lng + p2.lng) / 2,
+        index: i + 1
+      });
+    }
+    return midpoints;
   };
 
   const handleMapMouseDown = (e) => {
@@ -215,31 +254,52 @@ const MapView = forwardRef(({
 
   const [activePointer, setActivePointer] = useState(null);
 
-  const handleCopy = (lat, lng) => {
-    navigator.clipboard.writeText(`${lat}, ${lng}`);
-    alert(t('link_copied'));
-  };
+  // Custom SVG Markers
+  const vertexIcon = window.google ? {
+    path: window.google.maps.SymbolPath.CIRCLE,
+    fillColor: '#FFFFFF',
+    fillOpacity: 1,
+    strokeColor: '#2563EB',
+    strokeWeight: 2.5,
+    scale: 6
+  } : null;
 
-  const handleShare = (lat, lng) => {
-    const url = `${window.location.origin}${window.location.pathname}?lat=${lat}&lng=${lng}`;
+  const midpointIcon = window.google ? {
+    path: window.google.maps.SymbolPath.CIRCLE,
+    fillColor: '#3B82F6',
+    fillOpacity: 0.6,
+    strokeColor: '#FFFFFF',
+    strokeWeight: 1.5,
+    scale: 4.5
+  } : null;
+
+  const handleSharePointer = (pointer) => {
+    // Generate URL with lat and lng params
+    const shareUrl = `${window.location.origin}${window.location.pathname}?lat=${pointer.lat}&lng=${pointer.lng}`;
+    
     if (navigator.share) {
-      navigator.share({ title: 'Shared Location', url }).catch(console.error);
+      navigator.share({
+        title: 'Shared Map Location',
+        text: `Check out this location on GeoPlot: ${pointer.lat.toFixed(6)}, ${pointer.lng.toFixed(6)}`,
+        url: shareUrl,
+      })
+      .then(() => { if (showToast) showToast('Location shared successfully!', 'success') })
+      .catch((error) => {
+        // If user cancelled, don't show error
+        if (error.name !== 'AbortError' && showToast) {
+           showToast('Error sharing location.', 'error');
+        }
+      });
     } else {
-      navigator.clipboard.writeText(url);
-      alert(t('link_copied'));
+      // Fallback to clipboard
+      navigator.clipboard.writeText(shareUrl)
+        .then(() => { if (showToast) showToast('Link copied to clipboard!', 'success'); })
+        .catch(() => { if (showToast) showToast('Failed to copy link.', 'error'); });
     }
   };
 
   return (
     <div className="w-full h-full relative bg-background">
-      {language === 'ur' && (
-        <div className="absolute top-2 left-1/2 -translate-x-1/2 z-[1000] pointer-events-none">
-          <div className="bg-surface/80 backdrop-blur px-3 py-1 text-[10px] text-muted rounded-full shadow-sm border border-border">
-            Pakistan places show Urdu automatically on standard layer.
-          </div>
-        </div>
-      )}
-
       <div className="absolute top-10 left-1/2 -translate-x-1/2 z-[1000] pointer-events-none w-[90%] max-w-[400px]">
          <div className="bg-amber-100/95 backdrop-blur border border-amber-300 text-amber-900 px-3 py-2 text-[10px] sm:text-xs rounded-lg shadow-md text-center font-medium">
            Map data may be outdated in some areas. Please verify important boundaries with local records or recent imagery.
@@ -249,7 +309,7 @@ const MapView = forwardRef(({
       {!navigator.onLine && (
         <div className="absolute top-2 left-1/2 -translate-x-1/2 z-[1000] pointer-events-none">
           <div className="bg-danger/90 text-white px-3 py-1 text-xs rounded-full shadow-sm">
-            {t('offline_mode')}
+            Offline Mode
           </div>
         </div>
       )}
@@ -261,53 +321,105 @@ const MapView = forwardRef(({
         options={mapOptions}
         onLoad={onLoad}
         onUnmount={onUnmount}
+        onClick={handleMapClick}
         onMouseDown={handleMapMouseDown}
         onMouseUp={handleMapMouseUp}
         onMouseMove={handleMapMouseMove}
         onDragStart={handleMapDrag}
       >
-        <DrawingManager
-          onLoad={(dm) => { drawingManagerRef.current = dm; }}
-          onPolygonComplete={handleDrawComplete}
-          options={{
-            drawingMode: activeMode === 'draw' ? window.google.maps.drawing.OverlayType.POLYGON : null,
-            drawingControl: false,
-            polygonOptions: {
-              fillColor: '#3B82F6',
-              fillOpacity: 0.25,
-              strokeWeight: 3,
-              strokeColor: '#2563EB',
-              clickable: false,
-              editable: false,
-              zIndex: 10
-            }
-          }}
-        />
-
+        {/* Render Saved Polygons */}
         {polygons.map(polygon => {
           const isSelected = selectedPolygonId === polygon.id;
           const isEditing = activeMode === 'edit' && isSelected;
           
           return (
-            <Polygon
-              key={polygon.id}
-              onLoad={(instance) => attachPolygonListeners(instance, polygon.id)}
-              paths={polygon.coords}
-              onClick={() => handlePolygonClick(polygon.id)}
-              options={{
-                fillColor: isEditing ? '#3B82F6' : polygon.color,
-                fillOpacity: 0.25,
-                strokeColor: isEditing ? '#2563EB' : polygon.color,
-                strokeOpacity: 1,
-                strokeWeight: isSelected ? 4 : 3,
-                editable: isEditing,
-                draggable: isEditing,
-                zIndex: isSelected ? 20 : 10
-              }}
-            />
+            <React.Fragment key={polygon.id}>
+              <Polygon
+                paths={(() => {
+                  if (isEditing && activeMidpointDrag && activeMidpointDrag.polyId === polygon.id) {
+                     const renderCoords = [...polygon.coords];
+                     renderCoords.splice(activeMidpointDrag.insertIndex, 0, { lat: activeMidpointDrag.lat, lng: activeMidpointDrag.lng });
+                     return renderCoords;
+                  }
+                  return polygon.coords;
+                })()}
+                onClick={() => handlePolygonClick(polygon.id)}
+                options={{
+                  fillColor: (isSelected || isEditing) ? '#3B82F6' : polygon.color,
+                  fillOpacity: 0.25,
+                  strokeColor: (isSelected || isEditing) ? '#2563EB' : polygon.color,
+                  strokeOpacity: 1,
+                  strokeWeight: isSelected ? 4 : 3,
+                  editable: false, // Turn off native square handles entirely
+                  clickable: activeMode !== 'draw',
+                  zIndex: isSelected ? 20 : 10
+                }}
+              />
+              
+              {/* Custom Edit Markers */}
+              {isEditing && polygon.coords.map((coord, i) => (
+                <Marker
+                  key={`v-${i}`}
+                  position={coord}
+                  draggable={true}
+                  onDrag={(e) => handleVertexDrag(e, polygon.id, i)}
+                  onRightClick={() => handleVertexRightClick(polygon.id, i)}
+                  title="Right click to delete vertex"
+                  icon={vertexIcon}
+                  zIndex={30}
+                />
+              ))}
+
+              {/* Custom Midpoint Markers */}
+              {isEditing && getMidpoints(polygon.coords).map((mid, i) => (
+                <Marker
+                  key={`m-${i}`}
+                  position={{ lat: mid.lat, lng: mid.lng }}
+                  draggable={true}
+                  onDragStart={(e) => handleMidpointDragStart(e, polygon.id, mid.index)}
+                  onDrag={(e) => handleMidpointDrag(e)}
+                  onDragEnd={(e) => handleMidpointDragEnd(e, polygon.id, mid.index)}
+                  onClick={(e) => handleMidpointClick(e, polygon.id, mid.index)}
+                  icon={midpointIcon}
+                  title="Drag or click to add point"
+                  zIndex={25}
+                />
+              ))}
+            </React.Fragment>
           );
         })}
 
+        {/* Render Live Drawing Preview */}
+        {activeMode === 'draw' && drawCoords.length > 0 && (
+          <>
+            {/* Draw live transparent fill if we have mouseCoords */}
+            <Polygon
+              paths={mouseCoords ? [...drawCoords, mouseCoords] : drawCoords}
+              options={{
+                fillColor: '#3B82F6',
+                fillOpacity: 0.25,
+                strokeColor: '#2563EB',
+                strokeOpacity: 1,
+                strokeWeight: 3,
+                clickable: false,
+                zIndex: 40
+              }}
+            />
+            {/* Draw circular vertices for points already placed */}
+            {drawCoords.map((coord, i) => (
+              <Marker
+                key={`draw-v-${i}`}
+                position={coord}
+                icon={vertexIcon}
+                zIndex={45}
+                onClick={i === 0 ? handleDrawFinish : undefined}
+                title={i === 0 ? "Click to finish polygon" : ""}
+              />
+            ))}
+          </>
+        )}
+
+        {/* Markers and Pointers */}
         {searchedLocation && (
           <Marker position={{ lat: searchedLocation.lat, lng: searchedLocation.lon }} zIndex={0} />
         )}
@@ -330,18 +442,18 @@ const MapView = forwardRef(({
                      {pointer.lat.toFixed(6)}, {pointer.lng.toFixed(6)}
                    </p>
                    <div className="grid grid-cols-2 gap-2 mt-1">
-                     <button onClick={() => handleCopy(pointer.lat.toFixed(6), pointer.lng.toFixed(6))} className="flex items-center justify-center gap-1 bg-surface-soft border border-border py-2 px-1 rounded text-[10px] font-bold text-primary hover:bg-background transition-colors truncate">
-                       <Copy className="w-3 h-3 shrink-0" /> <span className="truncate">{t('copy_coords')}</span>
+                     <button onClick={() => { navigator.clipboard.writeText(`${pointer.lat}, ${pointer.lng}`).then(() => { if (showToast) showToast('Coordinates copied to clipboard!', 'success'); }); }} className="flex items-center justify-center gap-1 bg-surface-soft border border-border py-2 px-1 rounded text-[10px] font-bold text-primary hover:bg-background transition-colors truncate">
+                       <Copy className="w-3 h-3 shrink-0" /> <span className="truncate">Copy Coords</span>
                      </button>
-                     <button onClick={() => handleShare(pointer.lat.toFixed(6), pointer.lng.toFixed(6))} className="flex items-center justify-center gap-1 bg-primary text-surface py-2 px-1 rounded text-[10px] font-bold hover:brightness-110 transition-colors truncate">
-                       <Share2 className="w-3 h-3 shrink-0" /> <span className="truncate">{t('share')}</span>
+                     <button onClick={() => handleSharePointer(pointer)} className="flex items-center justify-center gap-1 bg-primary text-surface py-2 px-1 rounded text-[10px] font-bold hover:brightness-110 transition-colors truncate">
+                       <Share2 className="w-3 h-3 shrink-0" /> <span className="truncate">Share</span>
                      </button>
                    </div>
                    <button onClick={() => {
                      setPointers(prev => prev.filter(p => p.id !== pointer.id));
                      setActivePointer(null);
                    }} className="w-full flex items-center justify-center gap-1 bg-danger/10 text-danger border border-danger/20 py-2 rounded text-[10px] font-bold hover:bg-danger/20 transition-colors mt-1">
-                     {t('delete_pointer') || 'Delete'}
+                     Delete
                    </button>
                  </div>
                </InfoWindow>
@@ -350,7 +462,7 @@ const MapView = forwardRef(({
         ))}
       </GoogleMap>
 
-      <CustomLocateControl setSearchedLocation={setSearchedLocation} />
+      <CustomLocateControl setSearchedLocation={setSearchedLocation} showToast={showToast} />
       
       <LayerSwitcher 
         currentLayer={currentLayer} 
@@ -360,10 +472,10 @@ const MapView = forwardRef(({
       {mouseCoords && (
         <div className="absolute bottom-6 left-6 z-[1000] pointer-events-none">
           <div className="bg-surface/90 backdrop-blur px-3 py-1.5 rounded-lg shadow-sm text-xs font-mono text-muted border border-border flex items-center gap-2">
-            <span className="font-bold text-primary">{t('lat')}:</span>
+            <span className="font-bold text-primary">Lat:</span>
             <span>{mouseCoords.lat.toFixed(4)}° N</span>
             <span className="w-px h-3 bg-border mx-1"></span>
-            <span className="font-bold text-primary">{t('lng')}:</span>
+            <span className="font-bold text-primary">Lng:</span>
             <span>{mouseCoords.lng.toFixed(4)}° E</span>
           </div>
         </div>
