@@ -44,7 +44,7 @@ const CustomLocateControl = ({ setSearchedLocation, showToast }) => {
   };
 
   return (
-    <div className="absolute top-[130px] md:top-24 right-4 md:right-6 z-[1000]">
+    <div className="absolute top-[130px] lg:top-24 right-4 lg:right-6 z-[1000]">
       <button
         className="w-[40px] h-[40px] bg-surface shadow-md rounded-lg flex items-center justify-center hover:bg-surface-soft transition-colors text-primary focus:outline-none border-2 border-transparent"
         onClick={(e) => {
@@ -85,6 +85,7 @@ const MapView = forwardRef(({
   const [center, setCenter] = useState({ lat: 30.3753, lng: 69.3451 });
   const [zoom, setZoom] = useState(6);
   const [mouseCoords, setMouseCoords] = useState(null);
+  const [mapCenter, setMapCenter] = useState(null);
   
   // Custom Drawing State
   const [drawCoords, setDrawCoords] = useState([]);
@@ -92,8 +93,15 @@ const MapView = forwardRef(({
   const [activeMidpointDrag, setActiveMidpointDrag] = useState(null);
   
   const pressTimer = useRef(null);
-  const pressTimeout = 1500;
+  const pressTimeout = 3000;
   const drawStartTimestamp = useRef(0);
+
+  const clearPressTimer = useCallback(() => {
+    if (pressTimer.current) {
+      clearTimeout(pressTimer.current);
+      pressTimer.current = null;
+    }
+  }, []);
 
   useEffect(() => {
     if (activeMode !== 'draw') {
@@ -102,23 +110,46 @@ const MapView = forwardRef(({
     }
   }, [activeMode]);
  
-  const mapOptions = React.useMemo(() => ({
-    disableDefaultUI: true,
-    zoomControl: true,
-    mapTypeId: currentLayer.id,
-    gestureHandling: 'greedy',
-    maxZoom: null,
-    minZoom: null,
-    draggableCursor: activeMode === 'draw' ? 'crosshair' : 'grab',
-    disableDoubleClickZoom: activeMode === 'draw',
-  }), [currentLayer.id, activeMode]);
+  const mapOptions = React.useMemo(() => {
+    const options = {
+      disableDefaultUI: true,
+      zoomControl: true,
+      mapTypeId: currentLayer.id,
+      gestureHandling: 'greedy',
+      maxZoom: null,
+      minZoom: null,
+      draggableCursor: activeMode === 'draw' ? 'crosshair' : 'grab',
+      disableDoubleClickZoom: activeMode === 'draw',
+    };
+
+    if (window.google && window.google.maps) {
+      options.zoomControlOptions = {
+        position: window.google.maps.ControlPosition.RIGHT_BOTTOM
+      };
+    }
+
+    return options;
+  }, [currentLayer.id, activeMode]);
  
   const onLoad = useCallback((map) => {
     mapRef.current = map;
+    const centerLatLng = map.getCenter();
+    if (centerLatLng) {
+      setMapCenter({ lat: centerLatLng.lat(), lng: centerLatLng.lng() });
+    }
   }, []);
  
   const onUnmount = useCallback(() => {
     mapRef.current = null;
+  }, []);
+
+  const handleMapIdle = useCallback(() => {
+    if (mapRef.current) {
+      const centerLatLng = mapRef.current.getCenter();
+      if (centerLatLng) {
+        setMapCenter({ lat: centerLatLng.lat(), lng: centerLatLng.lng() });
+      }
+    }
   }, []);
 
   useEffect(() => {
@@ -290,6 +321,11 @@ const MapView = forwardRef(({
 
   const handleMapMouseDown = (e) => {
     if (e.latLng && activeMode !== 'draw' && activeMode !== 'edit') {
+      if (e.domEvent && e.domEvent.touches && e.domEvent.touches.length > 1) {
+        clearPressTimer();
+        return;
+      }
+      clearPressTimer();
       pressTimer.current = setTimeout(() => {
         setPointers(prev => [...prev, { id: Date.now(), lat: e.latLng.lat(), lng: e.latLng.lng() }]);
       }, pressTimeout);
@@ -297,18 +333,18 @@ const MapView = forwardRef(({
   };
 
   const handleMapMouseUp = () => {
-    if (pressTimer.current) clearTimeout(pressTimer.current);
+    clearPressTimer();
   };
 
   const handleMapMouseMove = (e) => {
-    if (pressTimer.current) clearTimeout(pressTimer.current);
+    clearPressTimer();
     if (e.latLng) {
       setMouseCoords({ lat: e.latLng.lat(), lng: e.latLng.lng() });
     }
   };
   
   const handleMapDrag = () => {
-    if (pressTimer.current) clearTimeout(pressTimer.current);
+    clearPressTimer();
   };
 
   const [activePointer, setActivePointer] = useState(null);
@@ -385,6 +421,9 @@ const MapView = forwardRef(({
         onMouseUp={handleMapMouseUp}
         onMouseMove={handleMapMouseMove}
         onDragStart={handleMapDrag}
+        onIdle={handleMapIdle}
+        onZoomChanged={clearPressTimer}
+        onCenterChanged={clearPressTimer}
       >
         {/* Render Saved Polygons */}
         {polygons.map(polygon => {
@@ -545,14 +584,14 @@ const MapView = forwardRef(({
         onLayerChange={onLayerChange} 
       />
 
-      {mouseCoords && (
-        <div className="absolute bottom-6 left-6 z-[1000] pointer-events-none">
+      {(mouseCoords || mapCenter) && (
+        <div className="absolute bottom-7 left-4 lg:bottom-6 lg:left-6 z-[1000] pointer-events-none">
           <div className="bg-surface/90 backdrop-blur px-3 py-1.5 rounded-lg shadow-sm text-xs font-mono text-muted border border-border flex items-center gap-2">
-            <span className="font-bold text-primary">Lat:</span>
-            <span>{mouseCoords.lat.toFixed(4)}° N</span>
+            <span className="font-bold text-primary">{mouseCoords ? 'Lat:' : 'Center Lat:'}</span>
+            <span>{((mouseCoords || mapCenter).lat).toFixed(4)}° N</span>
             <span className="w-px h-3 bg-border mx-1"></span>
-            <span className="font-bold text-primary">Lng:</span>
-            <span>{mouseCoords.lng.toFixed(4)}° E</span>
+            <span className="font-bold text-primary">{mouseCoords ? 'Lng:' : 'Center Lng:'}</span>
+            <span>{((mouseCoords || mapCenter).lng).toFixed(4)}° E</span>
           </div>
         </div>
       )}
