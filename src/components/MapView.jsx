@@ -103,6 +103,17 @@ const MapView = forwardRef(({
     }
   }, []);
 
+  const [isLargeScreen, setIsLargeScreen] = useState(
+    window.matchMedia('(min-width: 1024px)').matches
+  );
+
+  useEffect(() => {
+    const media = window.matchMedia('(min-width: 1024px)');
+    const listener = (e) => setIsLargeScreen(e.matches);
+    media.addEventListener('change', listener);
+    return () => media.removeEventListener('change', listener);
+  }, []);
+
   useEffect(() => {
     if (activeMode !== 'draw') {
       setDrawCoords([]);
@@ -124,12 +135,14 @@ const MapView = forwardRef(({
 
     if (window.google && window.google.maps) {
       options.zoomControlOptions = {
-        position: window.google.maps.ControlPosition.RIGHT_BOTTOM
+        position: isLargeScreen 
+          ? window.google.maps.ControlPosition.RIGHT_BOTTOM 
+          : window.google.maps.ControlPosition.RIGHT_CENTER
       };
     }
 
     return options;
-  }, [currentLayer.id, activeMode]);
+  }, [currentLayer.id, activeMode, isLargeScreen]);
  
   const onLoad = useCallback((map) => {
     mapRef.current = map;
@@ -395,7 +408,7 @@ const MapView = forwardRef(({
 
   return (
     <div className="w-full h-full relative bg-background">
-      <div className="absolute top-auto bottom-20 left-4 right-auto translate-x-0 w-auto max-w-[calc(100%-80px)] sm:max-w-[360px] lg:top-10 lg:bottom-auto lg:left-1/2 lg:-translate-x-1/2 lg:right-auto lg:w-[90%] lg:max-w-[400px] z-[1000] pointer-events-none transition-all duration-300">
+      <div className="absolute top-auto bottom-[98px] left-4 right-auto translate-x-0 w-auto max-w-[calc(100%-80px)] sm:max-w-[360px] lg:top-10 lg:bottom-auto lg:left-1/2 lg:-translate-x-1/2 lg:right-auto lg:w-[90%] lg:max-w-[400px] z-[1000] pointer-events-none transition-all duration-300">
          <div className="bg-amber-100/95 backdrop-blur border border-amber-300 text-amber-900 px-3 py-2 text-[10px] sm:text-xs rounded-lg shadow-md text-center font-medium">
            Map data may be outdated in some areas. Please verify important boundaries with local records or recent imagery.
          </div>
@@ -585,7 +598,7 @@ const MapView = forwardRef(({
       />
 
       {(mouseCoords || mapCenter) && (
-        <div className="absolute bottom-7 left-4 lg:bottom-6 lg:left-6 z-[1000] pointer-events-none">
+        <div className="absolute bottom-14 left-4 lg:bottom-6 lg:left-6 z-[1000] pointer-events-none">
           <div className="bg-surface/90 backdrop-blur px-3 py-1.5 rounded-lg shadow-sm text-xs font-mono text-muted border border-border flex items-center gap-2">
             <span className="font-bold text-primary">{mouseCoords ? 'Lat:' : 'Center Lat:'}</span>
             <span>{((mouseCoords || mapCenter).lat).toFixed(4)}° N</span>
