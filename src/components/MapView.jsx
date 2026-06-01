@@ -421,7 +421,21 @@ const MapView = forwardRef(({
 
         {/* Markers and Pointers */}
         {searchedLocation && (
-          <Marker position={{ lat: searchedLocation.lat, lng: searchedLocation.lon }} zIndex={0} />
+          <Marker 
+            position={{ lat: searchedLocation.lat, lng: searchedLocation.lon }} 
+            zIndex={100}
+            icon={
+              searchedLocation.isSearch || searchedLocation.name !== 'Current Location'
+                ? {
+                    url: "https://maps.google.com/mapfiles/ms/icons/orange-dot.png",
+                    scaledSize: window.google ? new window.google.maps.Size(42, 42) : null
+                  }
+                : {
+                    url: "https://maps.google.com/mapfiles/ms/icons/blue-dot.png",
+                    scaledSize: window.google ? new window.google.maps.Size(42, 42) : null
+                  }
+            }
+          />
         )}
 
         {pointers.map(pointer => (
