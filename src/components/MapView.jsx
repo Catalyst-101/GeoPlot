@@ -21,10 +21,25 @@ const CustomLocateControl = ({ setSearchedLocation, showToast }) => {
         setSearchedLocation({ lat: latitude, lon: longitude, name: 'Current Location' });
       },
       (error) => {
-        setIsLocating(false);
-        if (showToast) showToast("Locate me error: " + error.message, 'error');
+        if (error.code === error.TIMEOUT || error.code === error.POSITION_UNAVAILABLE) {
+          navigator.geolocation.getCurrentPosition(
+            (pos) => {
+              setIsLocating(false);
+              const { latitude, longitude } = pos.coords;
+              setSearchedLocation({ lat: latitude, lon: longitude, name: 'Current Location' });
+            },
+            (err) => {
+              setIsLocating(false);
+              if (showToast) showToast("Locate me error: " + err.message, 'error');
+            },
+            { enableHighAccuracy: false, timeout: 10000, maximumAge: 10000 }
+          );
+        } else {
+          setIsLocating(false);
+          if (showToast) showToast("Locate me error: " + error.message, 'error');
+        }
       },
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
   };
 
@@ -77,9 +92,17 @@ const MapView = forwardRef(({
   const [activeMidpointDrag, setActiveMidpointDrag] = useState(null);
   
   const pressTimer = useRef(null);
-  const pressTimeout = 700;
+  const pressTimeout = 1500;
+  const drawStartTimestamp = useRef(0);
 
-  const mapOptions = {
+  useEffect(() => {
+    if (activeMode !== 'draw') {
+      setDrawCoords([]);
+      setMouseCoords(null);
+    }
+  }, [activeMode]);
+ 
+  const mapOptions = React.useMemo(() => ({
     disableDefaultUI: true,
     zoomControl: true,
     mapTypeId: currentLayer.id,
@@ -87,12 +110,13 @@ const MapView = forwardRef(({
     maxZoom: null,
     minZoom: null,
     draggableCursor: activeMode === 'draw' ? 'crosshair' : 'grab',
-  };
-
+    disableDoubleClickZoom: activeMode === 'draw',
+  }), [currentLayer.id, activeMode]);
+ 
   const onLoad = useCallback((map) => {
     mapRef.current = map;
   }, []);
-
+ 
   const onUnmount = useCallback(() => {
     mapRef.current = null;
   }, []);
@@ -107,6 +131,7 @@ const MapView = forwardRef(({
   useImperativeHandle(ref, () => ({
     startDraw: () => {
       setDrawCoords([]);
+      drawStartTimestamp.current = Date.now();
     },
     startEdit: (polygonId) => {
       const p = polygons.find(p => p.id === polygonId);
@@ -140,18 +165,52 @@ const MapView = forwardRef(({
     }
   }));
 
+  // const handleMapClick = (e) => {
+  //   if (!e.latLng) return;
+    
+  //   if (activeMode === 'draw') {
+  //     if (Date.now() - drawStartTimestamp.current < 400) {
+  //       return;
+  //     }
+  //     setDrawCoords(prev => [...prev, { lat: e.latLng.lat(), lng: e.latLng.lng() }]);
+  //   } else if (activeMode !== 'edit') {
+  //     setSelectedPolygonId(null); // Deselect if clicking empty space
+  //   }
+  // };
+
   const handleMapClick = (e) => {
     if (!e.latLng) return;
-    
+
     if (activeMode === 'draw') {
-      setDrawCoords(prev => [...prev, { lat: e.latLng.lat(), lng: e.latLng.lng() }]);
-    } else if (activeMode !== 'edit') {
-      setSelectedPolygonId(null); // Deselect if clicking empty space
+      if (Date.now() - drawStartTimestamp.current < 400) {
+        return;
+      }
+      setDrawCoords(prev => [
+        ...prev,
+        { lat: e.latLng.lat(), lng: e.latLng.lng() }
+      ]);
+      return;
     }
-  };
+
+    if (activeMode !== 'edit') {
+      setSelectedPolygonId(null);
+    }
+  };  
+
+  // const handleDrawFinish = (e) => {
+  //   if (e) e.domEvent.stopPropagation();
+  //   if (drawCoords.length >= 3) {
+  //     onPolygonComplete([...drawCoords]);
+  //     setDrawCoords([]);
+  //   }
+  // };
 
   const handleDrawFinish = (e) => {
-    if (e) e.domEvent.stopPropagation();
+    if (e?.domEvent) {
+      e.domEvent.preventDefault();
+      e.domEvent.stopPropagation();
+    }
+
     if (drawCoords.length >= 3) {
       onPolygonComplete([...drawCoords]);
       setDrawCoords([]);
@@ -300,7 +359,7 @@ const MapView = forwardRef(({
 
   return (
     <div className="w-full h-full relative bg-background">
-      <div className="absolute top-10 left-1/2 -translate-x-1/2 z-[1000] pointer-events-none w-[90%] max-w-[400px]">
+      <div className="absolute top-auto bottom-20 left-4 right-auto translate-x-0 w-auto max-w-[calc(100%-80px)] sm:max-w-[360px] lg:top-10 lg:bottom-auto lg:left-1/2 lg:-translate-x-1/2 lg:right-auto lg:w-[90%] lg:max-w-[400px] z-[1000] pointer-events-none transition-all duration-300">
          <div className="bg-amber-100/95 backdrop-blur border border-amber-300 text-amber-900 px-3 py-2 text-[10px] sm:text-xs rounded-lg shadow-md text-center font-medium">
            Map data may be outdated in some areas. Please verify important boundaries with local records or recent imagery.
          </div>
@@ -412,8 +471,9 @@ const MapView = forwardRef(({
                 position={coord}
                 icon={vertexIcon}
                 zIndex={45}
-                onClick={i === 0 ? handleDrawFinish : undefined}
-                title={i === 0 ? "Click to finish polygon" : ""}
+                clickable={activeMode === 'draw' && drawCoords.length >= 3 && i === 0}
+                onClick={i === 0 ? (e) => handleDrawFinish(e) : undefined}
+                title={i === 0 && drawCoords.length >= 3 ? "Click to finish polygon" : ""}
               />
             ))}
           </>
@@ -424,6 +484,7 @@ const MapView = forwardRef(({
           <Marker 
             position={{ lat: searchedLocation.lat, lng: searchedLocation.lon }} 
             zIndex={100}
+            clickable={false}
             icon={
               searchedLocation.isSearch || searchedLocation.name !== 'Current Location'
                 ? {
@@ -444,6 +505,7 @@ const MapView = forwardRef(({
             position={{ lat: pointer.lat, lng: pointer.lng }}
             onClick={() => setActivePointer(pointer.id)}
             zIndex={0}
+            clickable={activeMode !== 'draw'}
             icon={{
               url: "http://maps.google.com/mapfiles/ms/icons/pink-dot.png",
               scaledSize: window.google ? new window.google.maps.Size(42, 42) : null
@@ -451,7 +513,7 @@ const MapView = forwardRef(({
           >
             {activePointer === pointer.id && (
                <InfoWindow onCloseClick={() => setActivePointer(null)}>
-                 <div className="flex flex-col gap-2 min-w-[180px] p-1 bg-surface text-text">
+                 <div className="flex flex-col gap-2 min-w-[180px] p-2 bg-surface text-text rounded-lg">
                    <p className="text-xs font-bold font-mono text-center text-text border-b border-border pb-2">
                      {pointer.lat.toFixed(6)}, {pointer.lng.toFixed(6)}
                    </p>

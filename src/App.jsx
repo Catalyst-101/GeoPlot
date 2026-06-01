@@ -71,7 +71,8 @@ function App() {
         areas: newPoly.areas,
         perimeters: newPoly.perimeters,
         vertexCount: newPoly.vertexCount,
-        coords: newPoly.coords
+        coords: newPoly.coords,
+        color: newPoly.color
       }, ...prev]);
     }
     setActiveMode(null);
@@ -93,7 +94,8 @@ function App() {
       areas: p.areas,
       perimeters: p.perimeters,
       vertexCount: p.vertexCount,
-      coords: p.coords
+      coords: p.coords,
+      color: p.color
     }, ...prev]);
     showToast('Edit saved to history.', 'success');
   }, [polygons, showToast]);
@@ -112,7 +114,7 @@ function App() {
     if (!polygons.some(p => p.id === item.id)) {
       setPolygons(prev => [...prev, {
         id: item.id,
-        color: '#3B82F6',
+        color: item.color || '#16A34A',
         coords: item.coords,
         areas: item.areas,
         perimeters: item.perimeters,
@@ -163,14 +165,14 @@ function App() {
 
       {/* Toast Notification */}
       {toast && (
-        <div className="absolute top-16 left-1/2 -translate-x-1/2 z-[3000] animate-in fade-in slide-in-from-top-4">
-          <div className={`px-4 py-2 rounded-full shadow-lg border flex items-center gap-2 text-sm font-bold backdrop-blur-md ${
+        <div className="absolute top-[72px] lg:top-16 left-1/2 -translate-x-1/2 z-[3000] animate-in fade-in slide-in-from-top-4 w-auto max-w-[90%] sm:max-w-none">
+          <div className={`px-3 py-1.5 sm:px-4 sm:py-2 rounded-full shadow-lg border flex items-center gap-2 text-xs sm:text-sm font-bold backdrop-blur-md ${
             toast.type === 'error' ? 'bg-danger/90 border-danger text-white' : 
             toast.type === 'success' ? 'bg-primary/90 border-primary text-white' : 
             'bg-surface/90 border-border text-text'
           }`}>
-            <Info className="w-4 h-4" />
-            {toast.msg}
+            <Info className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+            <span className="truncate">{toast.msg}</span>
           </div>
         </div>
       )}

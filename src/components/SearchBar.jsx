@@ -69,9 +69,11 @@ const SearchBar = ({ onLocationSelect, searchedLocation, showToast }) => {
       sessionTokenRef.current = new AutocompleteSessionToken();
     }
 
+    const cacheKey = trimmed.toLowerCase();
+
     // Check cache
-    if (cacheRef.current[trimmed]) {
-      setResults(cacheRef.current[trimmed]);
+    if (cacheRef.current[cacheKey]) {
+      setResults(cacheRef.current[cacheKey]);
       setIsOpen(true);
       setError(null);
       return;
@@ -86,7 +88,7 @@ const SearchBar = ({ onLocationSelect, searchedLocation, showToast }) => {
     })
     .then(({ suggestions }) => {
       if (suggestions && suggestions.length > 0) {
-        cacheRef.current[trimmed] = suggestions;
+        cacheRef.current[cacheKey] = suggestions;
         setResults(suggestions);
         setIsOpen(true);
         setError(null);
