@@ -90,6 +90,7 @@ const MapView = forwardRef(({
   // Custom Drawing State
   const [drawCoords, setDrawCoords] = useState([]);
   const [editBackupCoords, setEditBackupCoords] = useState(null);
+  const [editHistory, setEditHistory] = useState({});
   const [activeMidpointDrag, setActiveMidpointDrag] = useState(null);
   
   const pressTimer = useRef(null);
@@ -127,8 +128,7 @@ const MapView = forwardRef(({
       zoomControl: true,
       mapTypeId: currentLayer.id,
       gestureHandling: 'greedy',
-      maxZoom: null,
-      minZoom: null,
+      // Do not force min/max here (leave undefined to allow full zoom range)
       draggableCursor: activeMode === 'draw' ? 'crosshair' : 'grab',
       disableDoubleClickZoom: activeMode === 'draw',
     };
@@ -180,6 +180,9 @@ const MapView = forwardRef(({
     startEdit: (polygonId) => {
       const p = polygons.find(p => p.id === polygonId);
       if (p) setEditBackupCoords([...p.coords]);
+      if (p) {
+        setEditHistory(prev => ({ ...prev, [polygonId]: [JSON.parse(JSON.stringify(p.coords))] }));
+      }
     },
     save: () => {
       setEditBackupCoords(null);
@@ -198,6 +201,30 @@ const MapView = forwardRef(({
       }
       setDrawCoords([]);
       setEditBackupCoords(null);
+      setEditHistory({});
+    },
+    revert: () => {
+      if (activeMode === 'draw') {
+        if (drawCoords.length === 0) return false;
+        setDrawCoords(prev => prev.slice(0, -1));
+        return true;
+      }
+
+      if (activeMode === 'edit' && selectedPolygonId) {
+        const hist = editHistory[selectedPolygonId] || [];
+        if (hist.length === 0) return false;
+        const prev = hist[hist.length - 1];
+        // pop last entry
+        setEditHistory(prevHist => {
+          const copy = { ...prevHist };
+          copy[selectedPolygonId] = copy[selectedPolygonId].slice(0, -1);
+          return copy;
+        });
+        onPolygonEdit(selectedPolygonId, JSON.parse(JSON.stringify(prev)));
+        return true;
+      }
+
+      return false;
     },
     panToPolygon: (coords) => {
       if (mapRef.current && coords && coords.length > 0) {
@@ -270,6 +297,17 @@ const MapView = forwardRef(({
   const handleVertexDrag = (e, polyId, vertexIndex) => {
     const p = polygons.find(p => p.id === polyId);
     if (!p) return;
+    // push current coords into history if different
+    setEditHistory(prev => {
+      const cur = prev[polyId] ? prev[polyId] : [];
+      const last = cur.length ? JSON.stringify(cur[cur.length - 1]) : null;
+      const currCoordsStr = JSON.stringify(p.coords);
+      if (currCoordsStr !== last) {
+        return { ...prev, [polyId]: [...cur, JSON.parse(currCoordsStr)] };
+      }
+      return prev;
+    });
+
     const newCoords = [...p.coords];
     newCoords[vertexIndex] = { lat: e.latLng.lat(), lng: e.latLng.lng() };
     onPolygonEdit(polyId, newCoords);
@@ -282,6 +320,16 @@ const MapView = forwardRef(({
       if (showToast) showToast('A polygon must have at least 3 vertices.', 'error');
       return;
     }
+    setEditHistory(prev => {
+      const cur = prev[polyId] ? prev[polyId] : [];
+      const last = cur.length ? JSON.stringify(cur[cur.length - 1]) : null;
+      const currCoordsStr = JSON.stringify(p.coords);
+      if (currCoordsStr !== last) {
+        return { ...prev, [polyId]: [...cur, JSON.parse(currCoordsStr)] };
+      }
+      return prev;
+    });
+
     const newCoords = [...p.coords];
     newCoords.splice(vertexIndex, 1);
     onPolygonEdit(polyId, newCoords);
@@ -290,6 +338,16 @@ const MapView = forwardRef(({
   const handleMidpointClick = (e, polyId, insertIndex) => {
     const p = polygons.find(p => p.id === polyId);
     if (!p) return;
+    setEditHistory(prev => {
+      const cur = prev[polyId] ? prev[polyId] : [];
+      const last = cur.length ? JSON.stringify(cur[cur.length - 1]) : null;
+      const currCoordsStr = JSON.stringify(p.coords);
+      if (currCoordsStr !== last) {
+        return { ...prev, [polyId]: [...cur, JSON.parse(currCoordsStr)] };
+      }
+      return prev;
+    });
+
     const newCoords = [...p.coords];
     newCoords.splice(insertIndex, 0, { lat: e.latLng.lat(), lng: e.latLng.lng() });
     onPolygonEdit(polyId, newCoords);
@@ -311,6 +369,16 @@ const MapView = forwardRef(({
       setActiveMidpointDrag(null);
       return;
     }
+    setEditHistory(prev => {
+      const cur = prev[polyId] ? prev[polyId] : [];
+      const last = cur.length ? JSON.stringify(cur[cur.length - 1]) : null;
+      const currCoordsStr = JSON.stringify(p.coords);
+      if (currCoordsStr !== last) {
+        return { ...prev, [polyId]: [...cur, JSON.parse(currCoordsStr)] };
+      }
+      return prev;
+    });
+
     const newCoords = [...p.coords];
     newCoords.splice(insertIndex, 0, { lat: e.latLng.lat(), lng: e.latLng.lng() });
     onPolygonEdit(polyId, newCoords);
@@ -368,8 +436,8 @@ const MapView = forwardRef(({
     fillColor: '#FFFFFF',
     fillOpacity: 1,
     strokeColor: '#2563EB',
-    strokeWeight: 2.5,
-    scale: 6
+    strokeWeight: 1,
+    scale: 3
   } : null;
 
   const midpointIcon = window.google ? {
@@ -377,8 +445,8 @@ const MapView = forwardRef(({
     fillColor: '#3B82F6',
     fillOpacity: 0.6,
     strokeColor: '#FFFFFF',
-    strokeWeight: 1.5,
-    scale: 4.5
+    strokeWeight: 1,
+    scale: 3
   } : null;
 
   const handleSharePointer = (pointer) => {
@@ -435,7 +503,14 @@ const MapView = forwardRef(({
         onMouseMove={handleMapMouseMove}
         onDragStart={handleMapDrag}
         onIdle={handleMapIdle}
-        onZoomChanged={clearPressTimer}
+        onZoomChanged={() => {
+          clearPressTimer();
+          if (mapRef.current && typeof mapRef.current.getZoom === 'function') {
+            const z = mapRef.current.getZoom();
+            if (typeof z === 'number') setZoom(z);
+            // console.log('Zoom level:', z);
+          }
+        }}
         onCenterChanged={clearPressTimer}
       >
         {/* Render Saved Polygons */}
@@ -460,7 +535,7 @@ const MapView = forwardRef(({
                   fillOpacity: 0.25,
                   strokeColor: (isSelected || isEditing) ? '#2563EB' : polygon.color,
                   strokeOpacity: 1,
-                  strokeWeight: isSelected ? 4 : 3,
+                  strokeWeight: isSelected ? 2 : 2,
                   editable: false, // Turn off native square handles entirely
                   clickable: activeMode !== 'draw',
                   zIndex: isSelected ? 20 : 10

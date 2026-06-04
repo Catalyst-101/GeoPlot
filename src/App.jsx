@@ -238,6 +238,16 @@ function App() {
                 <button onClick={() => { mapRef.current?.save(); setActiveMode(null); }} className="flex-1 flex items-center justify-center gap-1 py-2 bg-primary text-surface rounded-lg font-bold text-sm hover:brightness-110">
                   <Check className="w-4 h-4" /> Save
                 </button>
+                <button onClick={() => {
+                  const ok = mapRef.current?.revert();
+                  if (ok) {
+                    showToast('Reverted last change.', 'info');
+                  } else {
+                    showToast('Nothing to revert.', 'info');
+                  }
+                }} className="flex-1 flex items-center justify-center gap-1 py-2 bg-surface text-text border border-border rounded-lg font-bold text-sm hover:bg-surface-soft">
+                  Revert
+                </button>
                 <button onClick={() => { mapRef.current?.cancel(); setActiveMode(null); showToast(`Polygon ${activeMode} cancelled.`, 'info'); }} className="flex-1 flex items-center justify-center gap-1 py-2 bg-surface text-text border border-border rounded-lg font-bold text-sm hover:bg-surface-soft">
                   <CancelIcon className="w-4 h-4" /> Cancel
                 </button>
